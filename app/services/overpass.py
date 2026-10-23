@@ -1,51 +1,116 @@
 import httpx
 
-ENDPOINT = "https://overpass-api.de/api/interpreter"
+# Main Overpass instance + a fallback mirror. Some mirrors reject a generic
+# User-Agent, so we identify ourselves.
+ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+]
+HEADERS = {"User-Agent": "lead_er/0.1 (https://github.com/emperorsixpacks/lead_er)"}
+
+# Category keyword -> OpenStreetMap (key, value) tag pairs to search.
+# Falls back to a name-substring search when a category is not listed.
+CATEGORY_TAGS: dict[str, list[tuple[str, str]]] = {
+    "plumber": [("craft", "plumber"), ("office", "plumber")],
+    "roofer": [("craft", "roofer"), ("office", "roofer")],
+    "hvac": [("craft", "hvac"), ("office", "hvac"), ("craft", "heating_engineer")],
+    "landscaper": [("craft", "landscaper"), ("craft", "gardener"), ("office", "landscaper")],
+    "electrician": [("craft", "electrician")],
+    "dentist": [("amenity", "dentist")],
+    "doctor": [("amenity", "doctors"), ("amenity", "clinic")],
+    "lawyer": [("office", "lawyer"), ("office", "notary")],
+    "accountant": [("office", "accountant")],
+    "real estate": [("office", "estate_agent")],
+    "restaurant": [("amenity", "restaurant")],
+    "cafe": [("amenity", "cafe")],
+    "gym": [("leisure", "fitness_centre"), ("shop", "gym")],
+    "salon": [("shop", "hairdresser"), ("shop", "beauty")],
+    "auto repair": [("shop", "car_repair")],
+    "cleaning": [("craft", "cleaner"), ("office", "cleaning")],
+    "painter": [("craft", "painter")],
+    "photographer": [("craft", "photographer")],
+}
+
+_CATEGORY_KEYS = ("amenity", "shop", "office", "craft", "tourism", "leisure")
+
+
+def category_tags(category: str) -> list[tuple[str, str]] | None:
+    return CATEGORY_TAGS.get(category.strip().lower())
+
+
+def _address(tags: dict) -> str | None:
+    num = tags.get("addr:housenumber", "")
+    street = tags.get("addr:street", "")
+    return f"{num} {street}".strip() or None
+
+
+def _city(tags: dict) -> str | None:
+    return (
+        tags.get("addr:city")
+        or tags.get("addr:town")
+        or tags.get("addr:village")
+    )
+
+
+def _category(tags: dict) -> str | None:
+    for key in _CATEGORY_KEYS:
+        if key in tags:
+            return tags[key]
+    return None
+
+
+def _normalize(el: dict) -> dict | None:
+    tags = el.get("tags", {})
+    name = tags.get("name")
+    if not name:
+        return None
+    return {
+        "business_name": name,
+        "category": _category(tags),
+        "address": _address(tags),
+        "city": _city(tags),
+        "phone": tags.get("phone") or tags.get("contact:phone"),
+        "website": tags.get("website") or tags.get("contact:website"),
+        "external_id": f"osm/{el['type']}/{el['id']}",
+    }
 
 
 async def query(overpass_ql: str) -> list[dict]:
-    """Run a raw Overpass QL query and return flattened element dicts."""
-    async with httpx.AsyncClient() as client:
-        r = await client.post(ENDPOINT, data={"data": overpass_ql}, timeout=60)
-        r.raise_for_status()
-        data = r.json()
-
-    results = []
-    for el in data.get("elements", []):
-        tags = el.get("tags", {})
-        name = tags.get("name")
-        if not name:
+    """Run a raw Overpass QL query and return normalized business dicts."""
+    last: Exception | None = None
+    for endpoint in ENDPOINTS:
+        try:
+            async with httpx.AsyncClient(headers=HEADERS) as client:
+                r = await client.post(endpoint, data={"data": overpass_ql}, timeout=90)
+                r.raise_for_status()
+                data = r.json()
+            return [
+                norm
+                for el in data.get("elements", [])
+                if (norm := _normalize(el)) is not None
+            ]
+        except Exception as exc:  # noqa: BLE001
+            last = exc
             continue
-        results.append(
-            {
-                "business_name": name,
-                "category": tags.get("amenity") or tags.get("shop") or tags.get("office"),
-                "address": tags.get("addr:street"),
-                "city": tags.get("addr:city"),
-                "phone": tags.get("phone"),
-                "website": tags.get("website"),
-                "external_id": f"osm/{el['type']}/{el['id']}",
-            }
-        )
-    return results
+    raise last or RuntimeError("all Overpass endpoints failed")
 
 
-def bbox_query(category: str, south: float, west: float, north: float, east: float) -> str:
-    """Build a query for a category inside a bounding box."""
-    key, value = category.split(":", 1) if ":" in category else ("amenity", category)
-    bbox = f"{south},{west},{north},{east}"
-    return (
-        f'[out:json][timeout:60];(node["{key}"="{value}"]({bbox});'
-        f'way["{key}"="{value}"]({bbox}););out center 100;'
-    )
+def _bbox(south: float, west: float, north: float, east: float) -> str:
+    return f"{south},{west},{north},{east}"
 
 
-async def search_name(fragment: str, south: float, west: float, north: float, east: float) -> list[dict]:
-    """Search businesses whose name contains `fragment` inside a bounding box."""
-    bbox = f"{south},{west},{north},{east}"
-    ql = (
-        f'[out:json][timeout:60];('
-        f'nwr["name"~"{fragment}",i]({bbox});'
-        f');out center 100;'
-    )
+async def search_tags(
+    tags: list[tuple[str, str]], south: float, west: float, north: float, east: float
+) -> list[dict]:
+    bbox = _bbox(south, west, north, east)
+    blocks = "".join(f'nwr["{k}"="{v}"]({bbox});' for k, v in tags)
+    ql = f"[out:json][timeout:90];({blocks});out center 100;"
+    return await query(ql)
+
+
+async def search_name(
+    fragment: str, south: float, west: float, north: float, east: float
+) -> list[dict]:
+    bbox = _bbox(south, west, north, east)
+    ql = f'[out:json][timeout:90];(nwr["name"~"{fragment}",i]({bbox}););out center 100;'
     return await query(ql)

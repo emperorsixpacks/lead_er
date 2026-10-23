@@ -72,31 +72,40 @@ async def discover(categories: list[str] | None = None, cities: list[str] | None
             return True
 
         for city in cits:
-            # Primary: Google Places text search.
-            for cat in cats:
-                try:
-                    results = await places.search_text(f"{cat} in {city}")
-                except Exception:
-                    continue
-                for p in results:
-                    await add(p, city, "places")
-
-            # Secondary: OpenStreetMap Overpass by name, scoped to the city bbox.
+            # Bounding box for the city (Nominatim, free) — shared by Overpass.
             try:
                 bbox = await geocode_city(city)
             except Exception:
                 bbox = None
-            if bbox:
-                for cat in cats:
-                    frag = _singular(cat)
+
+            for cat in cats:
+                frag = _singular(cat)
+
+                # Primary (free, no key): OpenStreetMap Overpass.
+                if bbox:
                     try:
-                        items = await overpass.search_name(
-                            frag, bbox["south"], bbox["west"], bbox["north"], bbox["east"]
-                        )
+                        tags = overpass.category_tags(frag)
+                        if tags:
+                            items = await overpass.search_tags(
+                                tags, bbox["south"], bbox["west"], bbox["north"], bbox["east"]
+                            )
+                        else:
+                            items = await overpass.search_name(
+                                frag, bbox["south"], bbox["west"], bbox["north"], bbox["east"]
+                            )
                     except Exception:
-                        continue
+                        items = []
                     for item in items:
                         await add(item, city, "overpass")
+
+                # Optional (paid, needs key): Google Places text search.
+                if settings.google_maps_api_key:
+                    try:
+                        results = await places.search_text(f"{cat} in {city}")
+                    except Exception:
+                        results = []
+                    for p in results:
+                        await add(p, city, "places")
 
         await db.commit()
     return created
