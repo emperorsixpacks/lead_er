@@ -37,7 +37,7 @@ worker/
 ## Quickstart
 
 1. **Env**: `cp .env.example .env`, set `API_SECRET`, `NTFY_TOPIC`, `TRACKING_BASE_URL`,
-   `SEND_FROM_EMAIL`, and your API keys (`GOOGLE_MAPS_API_KEY`, `ZEROBOUNCE_API_KEY`, `LLM_API_KEY`).
+   `GMAIL_SMTP_USER`/`GMAIL_SMTP_PASSWORD`, and your API keys (`MILLIONVERIFIER_API_KEY`, `LLM_API_KEY`).
 
 2. **DB**: `docker compose up -d postgres` (or point `DATABASE_URL` at any Postgres 14+).
 
@@ -91,4 +91,4 @@ Gmail's image proxy and prefetchers fire within seconds of send and are flagged 
 - Cold B2B email in the EU/UK needs a legitimate-interest basis under GDPR; Nigeria has NDPR.
   US B2B is generally CAN-SPAM only. Set `TARGET_COUNTRY` accordingly.
 - Do not scrape LinkedIn (bans). The enrich crawler only reads the business's own site.
-- Check ToS for Google Places/Overpass/Zerobounce usage.
+- Check ToS for Google Places/Overpass/MillionVerifier usage.

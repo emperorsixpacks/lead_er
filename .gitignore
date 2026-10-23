@@ -8,6 +8,9 @@ venv/
 .idea/
 .vscode/
 
+# Editor/linter temp files (null-ls)
+*.null-ls_*
+
 # Gmail / secrets
 client_secret*.json
 token.json
