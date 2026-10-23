@@ -1,0 +1,10 @@
+name = "lead-er-tracker"
+main = "src/index.js"
+compatibility_date = "2024-05-01"
+
+# Point this at your tracking subdomain (e.g. t.yourdomain.com)
+# Uncomment and set your own route, or use `wrangler deploy` with --routes.
+# routes = [{ pattern = "t.yourdomain.com/*", zone_id = "YOUR_ZONE_ID" }]
+
+[observability]
+enabled = true

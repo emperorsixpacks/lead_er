@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.idea/
+.vscode/
+
+# Gmail / secrets
+client_secret*.json
+token.json
+credentials.json
+
+# Cloudflare
+worker/.dev.vars
+worker/.wrangler/
+
+# Data / logs
+*.log
+data/
+.docker/
