@@ -21,7 +21,6 @@ class Settings(BaseSettings):
     target_country: str = "US"
 
     # Verify / Personalize
-    zerobounce_api_key: str = ""
     millionverifier_api_key: str = ""
     # Local testing: return deterministic results instead of calling a provider.
     email_verify_mock: bool = False

@@ -4,7 +4,7 @@ Two parts:
   - extract_people(): pull likely owner/founder names out of site text.
   - guess_emails(): generate common email patterns from a first/last name + domain.
 
-Guessed addresses MUST be verified (ZeroBounce / MillionVerifier) before sending —
+Guessed addresses MUST be verified (MillionVerifier) before sending —
 sending to a guessed address that bounces will kill your domain reputation.
 """
 import re
