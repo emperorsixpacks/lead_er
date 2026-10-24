@@ -63,6 +63,7 @@ async def events(req: Request):
         )
 
         if not is_bot and e.type in ("open", "click", "reply", "bounce", "unsub"):
+            # Only upgrade; a lower-priority event must not overwrite a higher one.
             new_status = {
                 "open": "opened",
                 "click": "clicked",
@@ -70,10 +71,17 @@ async def events(req: Request):
                 "bounce": "bounced",
                 "unsub": "unsub",
             }.get(e.type)
+            prior = {
+                "open": ("sent",),
+                "click": ("sent", "opened"),
+                "reply": ("sent", "opened", "clicked"),
+                "bounce": ("sent", "opened", "clicked", "replied"),
+                "unsub": ("sent", "opened", "clicked", "replied"),
+            }.get(e.type, ())
             if new_status:
                 await db.execute(
                     Lead.__table__.update()
-                    .where(Lead.id == lead_id, Lead.status.in_(("sent", "opened", "clicked")))
+                    .where(Lead.id == lead_id, Lead.status.in_(prior))
                     .values(status=new_status)
                 )
 
