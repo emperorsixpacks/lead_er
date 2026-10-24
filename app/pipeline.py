@@ -213,6 +213,7 @@ async def personalize_lead(lead_id: str) -> dict:
         facts = lead.facts or {}
         facts["facts"] = result.get("facts", [])
         facts["subject_line"] = result.get("subject_line", "")
+        facts["contact_name"] = result.get("contact_name", "")
         lead.facts = facts
         lead.status = "personalized"
         await db.commit()
@@ -234,7 +235,10 @@ def _render(lead: Lead, token: str) -> tuple[str, str]:
         else ""
     )
     hook = lead.hook or f"I came across {lead.business_name or 'your business'} and wanted to reach out."
-    name = lead.business_name or "there"
+    contact_name = (lead.facts or {}).get("contact_name", "") or ""
+    # Greet the person if we know their first name, else the business.
+    first_name = contact_name.strip().split(" ")[0] if contact_name.strip() else ""
+    name = first_name or (lead.business_name or "there")
     sender = settings.sender_name or settings.sender_company or settings.gmail_smtp_user
 
     def link(label: str, url: str) -> str:

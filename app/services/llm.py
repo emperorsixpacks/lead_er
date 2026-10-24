@@ -12,11 +12,13 @@ Return ONLY a JSON object (no prose, no markdown, no code fences) with exactly t
 {
   "subject_line": "<short subject, under 40 characters, that references the business>",
   "hook": "<the opening line, 1-2 sentences, referencing something SPECIFIC about this business: what they sell, a specialty, years in business, a recent project, or a notable detail>",
-  "facts": ["<concrete, verifiable fact>", "<fact>", "<fact>"]
+  "facts": ["<concrete, verifiable fact>", "<fact>", "<fact>"],
+  "contact_name": "<the founder / owner / principal's full name if the text names one, else empty string>"
 }
 
 Rules:
 - 2 to 3 facts max.
+- contact_name: only a real person's name found in the text (e.g. "John Smith", "Dr. Jane Doe"). Leave "" if no name is given. Never invent one.
 - Never invent facts. Only use what is in the provided text.
 - No generic flattery ("I love what you do", "great company").
 - No assumptions about the reader's location, identity, or title.
@@ -24,7 +26,7 @@ Rules:
 - If there is nothing to work with, return empty strings and an empty list.
 """
 
-_KEYS = ("subject_line", "hook")
+_KEYS = ("subject_line", "hook", "contact_name")
 
 
 def _unescape(s: str) -> str:
