@@ -2,7 +2,16 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import settings
 
-engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+# Neon (serverless Postgres) closes idle connections aggressively, so we
+# pre-ping and recycle pooled connections before Neon drops them. Keep the
+# pool small — this is a low-concurrency service.
+engine = create_async_engine(
+    settings.database_url,
+    pool_pre_ping=True,
+    pool_recycle=180,  # recycle before Neon's ~5min idle timeout
+    pool_size=5,
+    max_overflow=5,
+)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
