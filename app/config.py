@@ -28,11 +28,15 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = "gpt-4o-mini"
 
-    # Sending (Gmail SMTP via app password)
+    # Sending (Gmail: SMTP app password, or OAuth API for PaaS like Render)
     gmail_smtp_host: str = "smtp.gmail.com"
     gmail_smtp_port: int = 465
     gmail_smtp_user: str = ""
     gmail_smtp_password: str = ""
+    # Gmail API (OAuth) — used automatically when gmail_refresh_token is set.
+    gmail_client_id: str = ""
+    gmail_client_secret: str = ""
+    gmail_refresh_token: str = ""
     daily_send_cap: int = 30
     # BCC a copy of every send to this address (e.g. your own inbox).
     send_bcc_email: str = ""
