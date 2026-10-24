@@ -34,6 +34,16 @@ class Settings(BaseSettings):
     gmail_smtp_user: str = ""
     gmail_smtp_password: str = ""
     daily_send_cap: int = 30
+    # BCC a copy of every send to this address (e.g. your own inbox).
+    send_bcc_email: str = ""
+    # Email copy: signoff name, pitch, and links (all optional; omitted when empty).
+    sender_name: str = ""
+    email_value_prop: str = ""
+    email_demo_url: str = ""
+    email_booking_url: str = ""
+    email_linkedin_url: str = ""
+    # One-line call-to-action appended after the personalized hook.
+    email_cta: str = "Would you be open to a quick 15-minute chat?"
     # CAN-SPAM: physical mailing address + sender name on every email.
     sender_company: str = ""
     sender_address: str = ""

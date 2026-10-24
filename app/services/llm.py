@@ -5,13 +5,13 @@ import httpx
 
 from app.config import settings
 
-SYSTEM = """You write cold-email personalization for small local businesses.
+SYSTEM = """You write the personalized opening of a cold B2B email.
 You are given structured info about a business: name, category, city, and text scraped from its website.
 Return ONLY a JSON object (no prose, no markdown, no code fences) with exactly these keys:
 
 {
   "subject_line": "<short subject, under 40 characters, that references the business>",
-  "hook": "<one line, under 14 words, referencing something SPECIFIC about this business: what they sell, a specialty, years in business, a recent project, or a local detail>",
+  "hook": "<the opening line, 1-2 sentences, referencing something SPECIFIC about this business: what they sell, a specialty, years in business, a recent project, or a notable detail>",
   "facts": ["<concrete, verifiable fact>", "<fact>", "<fact>"]
 }
 
@@ -19,6 +19,8 @@ Rules:
 - 2 to 3 facts max.
 - Never invent facts. Only use what is in the provided text.
 - No generic flattery ("I love what you do", "great company").
+- No assumptions about the reader's location, identity, or title.
+- Write like a real person who actually looked at their site, not a marketer.
 - If there is nothing to work with, return empty strings and an empty list.
 """
 

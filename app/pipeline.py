@@ -117,7 +117,10 @@ async def enrich_lead(lead_id: str) -> dict:
         lead = (await db.execute(select(Lead).where(Lead.id == lead_id))).scalar_one_or_none()
         if not lead or not lead.website:
             return {}
-        data = await crawl(lead.website)
+        try:
+            data = await crawl(lead.website)
+        except Exception as exc:
+            return {"error": f"crawl:{exc.__class__.__name__}"}
         emails = data.get("emails", [])
         site_text = data.get("site_text", "")
 
@@ -185,12 +188,15 @@ async def personalize_lead(lead_id: str) -> dict:
         if not lead:
             return {}
         site_text = (lead.facts or {}).get("site_text", "") or ""
-        result = await llm.personalize(
-            business_name=lead.business_name or "",
-            category=lead.category or "",
-            city=lead.city or "",
-            site_text=site_text,
-        )
+        try:
+            result = await llm.personalize(
+                business_name=lead.business_name or "",
+                category=lead.category or "",
+                city=lead.city or "",
+                site_text=site_text,
+            )
+        except Exception as exc:
+            return {"error": f"llm:{exc.__class__.__name__}"}
         lead.hook = result.get("hook")
         facts = lead.facts or {}
         facts["facts"] = result.get("facts", [])
@@ -203,15 +209,6 @@ async def personalize_lead(lead_id: str) -> dict:
 
 # ── Send ──────────────────────────────────────────────────────────────
 SUBJECT_TEMPLATE = "{business} — quick question"
-BODY_TEMPLATE = """<html><body>
-<p>Hi {name},</p>
-<p>{hook}</p>
-<p>{facts_html}</p>
-<p>Thanks,<br>{sender}</p>
-<p style="color:#888;font-size:12px">
-<a href="{unsub}">Unsubscribe</a> · {company} · {address}
-</p>
-</body></html>"""
 
 
 def _render(lead: Lead, token: str) -> tuple[str, str]:
@@ -219,16 +216,40 @@ def _render(lead: Lead, token: str) -> tuple[str, str]:
         business=lead.business_name or "your business"
     )
     facts = (lead.facts or {}).get("facts", []) or []
-    facts_html = "<ul>" + "".join(f"<li>{html.escape(f)}</li>" for f in facts) + "</ul>"
+    facts_html = (
+        "<ul>" + "".join(f"<li>{html.escape(f)}</li>" for f in facts) + "</ul>"
+        if facts
+        else ""
+    )
     hook = lead.hook or f"I came across {lead.business_name or 'your business'} and wanted to reach out."
-    body = BODY_TEMPLATE.format(
-        name=lead.business_name or "there",
-        hook=html.escape(hook),
-        facts_html=facts_html,
-        sender=html.escape(settings.sender_company or settings.gmail_smtp_user),
-        unsub=unsubscribe_url(token),
-        company=html.escape(settings.sender_company or ""),
-        address=html.escape(settings.sender_address or ""),
+    name = lead.business_name or "there"
+    sender = settings.sender_name or settings.sender_company or settings.gmail_smtp_user
+
+    def link(label: str, url: str) -> str:
+        return f'<p><a href="{html.escape(url)}">{html.escape(label)}</a></p>' if url else ""
+
+    value_prop = f"<p>{html.escape(settings.email_value_prop)}</p>" if settings.email_value_prop else ""
+    demo_block = link("Watch a 3-minute demo", settings.email_demo_url)
+    booking_block = link("Book a 15-minute call", settings.email_booking_url)
+    linkedin_block = link("LinkedIn", settings.email_linkedin_url)
+    cta = f"<p>{html.escape(settings.email_cta)}</p>" if settings.email_cta else ""
+
+    body = (
+        "<html><body>"
+        f"<p>Hi {html.escape(name)},</p>"
+        f"<p>{html.escape(hook)}</p>"
+        f"{value_prop}"
+        f"{facts_html}"
+        f"{demo_block}"
+        f"{booking_block}"
+        f"{cta}"
+        "<p>If you're not the right person for this, could you point me to whoever is?</p>"
+        f"<p>Thanks,<br>{html.escape(sender)}</p>"
+        f"{linkedin_block}"
+        '<p style="color:#888;font-size:12px">'
+        f'<a href="{unsubscribe_url(token)}">Unsubscribe</a>'
+        f" · {html.escape(settings.sender_company or '')} · {html.escape(settings.sender_address or '')}</p>"
+        "</body></html>"
     )
     body += pixel_html(token)
     return subject, body
@@ -254,7 +275,9 @@ async def send_lead(lead_id: str) -> str:
         token = new_token()
         subject, body = _render(lead, token)
         try:
-            message_id, thread_id = gmail.send_email(lead.email, subject, body)
+            message_id, thread_id = gmail.send_email(
+                lead.email, subject, body, bcc=settings.send_bcc_email or None
+            )
         except Exception as exc:
             return f"error:{exc}"
 
@@ -295,4 +318,15 @@ async def run_pipeline(limit: int = 50) -> dict:
             results["sent"] += 1
         elif outcome == "suppressed":
             results["suppressed"] += 1
+    return results
+
+
+async def scheduled_run(limit: int = 30) -> dict:
+    """Discover new leads, then run them through the full pipeline.
+
+    Called by the Cloudflare Worker's cron trigger.
+    """
+    discovered = await discover()
+    results = await run_pipeline(limit)
+    results["discovered"] = discovered
     return results

@@ -41,3 +41,10 @@ async def run_send(lead_id: UUID, bg: BackgroundTasks):
 async def run_full(bg: BackgroundTasks, limit: int = 50):
     bg.add_task(pipeline.run_pipeline, limit)
     return {"started": "run", "limit": limit}
+
+
+@router.post("/schedule")
+async def run_scheduled(bg: BackgroundTasks, limit: int = 30):
+    """Cron entrypoint: discover new leads then process + send them."""
+    bg.add_task(pipeline.scheduled_run, limit)
+    return {"started": "schedule", "limit": limit}
