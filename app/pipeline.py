@@ -32,9 +32,12 @@ def _city_name(city: str) -> str:
 
 def _singular(cat: str) -> str:
     c = cat.strip().lower()
-    for suf in ("ers", "es", "s"):
-        if c.endswith(suf) and len(c) > 4:
-            return c[: -len(suf)]
+    if c.endswith("ies") and len(c) > 4:
+        return c[:-3] + "y"  # companies -> company
+    if c.endswith("es") and len(c) > 3:
+        return c[:-2]  # businesses -> business
+    if c.endswith("s") and len(c) > 3:
+        return c[:-1]  # roofers -> roofer, plumbers -> plumber
     return c
 
 
@@ -50,6 +53,9 @@ async def discover(categories: list[str] | None = None, cities: list[str] | None
             nonlocal created
             name = item.get("business_name")
             if not name:
+                return False
+            # Skip empty nodes (street names, non-businesses): no website and no phone.
+            if not item.get("website") and not item.get("phone"):
                 return False
             exists = (
                 await db.execute(
