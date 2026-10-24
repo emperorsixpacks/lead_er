@@ -9,11 +9,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-# Playwright chromium + deps (used by the enrich crawler)
+# Playwright chromium + system deps (used by the enrich crawler)
 RUN playwright install --with-deps chromium
 
 COPY . .
 
-RUN mkdir -p /app/secrets
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Render sets PORT; default to 8000 for local runs.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
