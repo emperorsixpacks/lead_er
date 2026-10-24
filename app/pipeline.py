@@ -5,6 +5,7 @@ discover -> enrich -> verify -> personalize -> send
 Trigger them from HTTP endpoints (app.api.pipeline) or scripts/run_pipeline.py.
 """
 import html
+import logging
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
@@ -19,6 +20,8 @@ from app.services.enrich import crawl
 from app.services.geocode import geocode_city
 from app.services import overpass
 from app.services.tracking import new_token, pixel_html, unsubscribe_url
+
+logger = logging.getLogger("lead_er")
 
 SUPPRESSED = {"unsub", "bounced", "invalid"}
 
@@ -196,6 +199,7 @@ async def personalize_lead(lead_id: str) -> dict:
                 site_text=site_text,
             )
         except Exception as exc:
+            logger.exception("personalize failed for %s", lead.business_name)
             return {"error": f"llm:{exc.__class__.__name__}"}
         lead.hook = result.get("hook")
         facts = lead.facts or {}
@@ -279,6 +283,7 @@ async def send_lead(lead_id: str) -> str:
                 lead.email, subject, body, bcc=settings.send_bcc_email or None
             )
         except Exception as exc:
+            logger.exception("send_lead failed for %s -> %s", lead.business_name, lead.email)
             return f"error:{exc}"
 
         db.add(
