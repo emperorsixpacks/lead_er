@@ -1,6 +1,7 @@
 import httpx
 
 from app.config import settings
+from app.services import smtp_verify
 
 MV_URL = "https://api.millionverifier.com/api/v3/"
 
@@ -15,15 +16,20 @@ _MV_MAP = {
 
 
 async def verify(email: str, ip: str = "") -> dict:
-    """Validate an email via MillionVerifier.
+    """Validate an email.
 
     Returns {'status': valid|risky|invalid, 'raw': ..., 'provider': ...}.
-    Falls back to a mock when no key is set (see settings.email_verify_mock).
+
+    Priority: mock (testing) -> MillionVerifier (if key set) -> DIY SMTP (free).
     """
     if settings.email_verify_mock:
         return _mock(email)
-    if not settings.millionverifier_api_key:
-        return {"status": "risky", "raw": None, "provider": "none"}
+    if settings.millionverifier_api_key:
+        return await _millionverifier(email)
+    return await smtp_verify.verify_smtp(email)
+
+
+async def _millionverifier(email: str) -> dict:
     params = {"api": settings.millionverifier_api_key, "email": email}
     async with httpx.AsyncClient() as client:
         r = await client.get(MV_URL, params=params)
