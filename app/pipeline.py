@@ -275,6 +275,28 @@ async def send_lead(lead_id: str) -> str:
         if lead.status in SUPPRESSED or lead.email_status == "invalid" or not lead.email:
             return "suppressed"
 
+        addr = lead.email.strip().lower()
+
+        # Anti-spam: never email an address that bounced or unsubscribed on ANY lead.
+        suppressed = (
+            await db.execute(
+                select(Lead.id)
+                .where(func.lower(Lead.email) == addr, Lead.status.in_(("unsub", "bounced")))
+                .limit(1)
+            )
+        ).first()
+        if suppressed:
+            return "suppressed"
+
+        # Anti-spam: never email an address we've already contacted (any lead).
+        already_sent = (
+            await db.execute(
+                select(Email.id).where(func.lower(Email.to_address) == addr).limit(1)
+            )
+        ).first()
+        if already_sent:
+            return "already-sent"
+
         today = datetime.now(timezone.utc).date()
         sent_today = (
             await db.execute(
@@ -318,7 +340,7 @@ async def run_pipeline(limit: int = 50) -> dict:
             )
         ).scalars().all()
 
-    results = {"enriched": 0, "verified": 0, "personalized": 0, "sent": 0, "suppressed": 0}
+    results = {"enriched": 0, "verified": 0, "personalized": 0, "sent": 0, "suppressed": 0, "duplicate": 0}
     for lead in new_leads:
         await enrich_lead(str(lead.id))
         results["enriched"] += 1
@@ -331,6 +353,8 @@ async def run_pipeline(limit: int = 50) -> dict:
             results["sent"] += 1
         elif outcome == "suppressed":
             results["suppressed"] += 1
+        elif outcome == "already-sent":
+            results["duplicate"] += 1
     return results
 
 
