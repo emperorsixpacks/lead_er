@@ -15,7 +15,7 @@ from app.config import settings
 from app.db import SessionLocal
 from app.models import Email, Lead
 from app.services import gmail, llm, places, verifier
-from app.services.email_guess import extract_people, guess_emails, _split
+from app.services.email_guess import extract_people, guess_emails, guess_generic, _split
 from app.services.enrich import crawl
 from app.services.geocode import geocode_city
 from app.services import overpass
@@ -135,13 +135,15 @@ async def enrich_lead(lead_id: str) -> dict:
 
         # Founder/owner detection + email pattern guessing when no address was published.
         people = extract_people(site_text)
-        candidates: list[str] = []
         domain = urlparse(lead.website).netloc
-        if not emails and people:
-            for person in people[:3]:
-                first, last = _split(person["name"])
-                candidates += guess_emails(domain, first, last)
-        candidates = list(dict.fromkeys(candidates))
+        candidates: list[str] = []
+        for person in people[:3]:
+            first, last = _split(person["name"])
+            candidates += guess_emails(domain, first, last)
+        # Generic catch-all addresses (info@, contact@, ...) are common for SMBs.
+        if not emails:
+            candidates += guess_generic(domain)
+        candidates = list(dict.fromkeys(c for c in candidates if c))
 
         if emails and not lead.email:
             lead.email = emails[0]

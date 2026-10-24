@@ -77,3 +77,14 @@ def guess_emails(domain: str, first: str, last: str) -> list[str]:
         patterns.append(f"{l}@{domain}")
     # dedupe, preserve order
     return list(dict.fromkeys(p for p in patterns if "@" in p))
+
+
+GENERIC_PREFIXES = ("info", "contact", "hello", "admin", "sales", "office", "support")
+
+
+def guess_generic(domain: str) -> list[str]:
+    """Common catch-all addresses small businesses almost always have."""
+    domain = (domain or "").strip().lower().removeprefix("www.")
+    if not domain:
+        return []
+    return [f"{p}@{domain}" for p in GENERIC_PREFIXES]
