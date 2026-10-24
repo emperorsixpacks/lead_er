@@ -1,12 +1,15 @@
 import httpx
 
-# Main Overpass instance + a fallback mirror. Some mirrors reject a generic
-# User-Agent, so we identify ourselves.
+# Overpass mirrors, ordered fastest/most reliable first. The main instance
+# (overpass-api.de) rate-limits heavily, so we keep it last and fail over fast.
 ENDPOINTS = [
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    "https://overpass.openstreetmap.fr/api/interpreter",
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
 ]
 HEADERS = {"User-Agent": "lead_er/0.1 (https://github.com/emperorsixpacks/lead_er)"}
+_TIMEOUT = 20
 
 # Category keyword -> OpenStreetMap (key, value) tag pairs to search.
 # Falls back to a name-substring search when a category is not listed.
@@ -81,7 +84,7 @@ async def query(overpass_ql: str) -> list[dict]:
     for endpoint in ENDPOINTS:
         try:
             async with httpx.AsyncClient(headers=HEADERS) as client:
-                r = await client.post(endpoint, data={"data": overpass_ql}, timeout=90)
+                r = await client.post(endpoint, data={"data": overpass_ql}, timeout=_TIMEOUT)
                 r.raise_for_status()
                 data = r.json()
             return [
@@ -104,7 +107,7 @@ async def search_tags(
 ) -> list[dict]:
     bbox = _bbox(south, west, north, east)
     blocks = "".join(f'nwr["{k}"="{v}"]({bbox});' for k, v in tags)
-    ql = f"[out:json][timeout:90];({blocks});out center 100;"
+    ql = f"[out:json][timeout:25];({blocks});out center 100;"
     return await query(ql)
 
 
@@ -112,5 +115,5 @@ async def search_name(
     fragment: str, south: float, west: float, north: float, east: float
 ) -> list[dict]:
     bbox = _bbox(south, west, north, east)
-    ql = f'[out:json][timeout:90];(nwr["name"~"{fragment}",i]({bbox}););out center 100;'
+    ql = f'[out:json][timeout:25];(nwr["name"~"{fragment}",i]({bbox}););out center 100;'
     return await query(ql)
