@@ -12,6 +12,11 @@ const GIF = Uint8Array.from(
 );
 
 export default {
+  // Cron trigger: kick off discover + send on the backend.
+  async scheduled(event, env, ctx) {
+    await fetch(env.API_URL + "/pipeline/schedule", { method: "POST" }).catch(() => {});
+  },
+
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
     const parts = url.pathname.split("/").filter(Boolean); // ["o", "<token>.gif"]
