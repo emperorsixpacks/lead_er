@@ -295,7 +295,7 @@ async def send_lead(lead_id: str) -> str:
         # Anti-spam: never email an address we've already contacted (any lead).
         already_sent = (
             await db.execute(
-                select(Email.id).where(func.lower(Email.to_address) == addr).limit(1)
+                select(Email.token).where(func.lower(Email.to_address) == addr).limit(1)
             )
         ).first()
         if already_sent:
