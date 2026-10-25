@@ -250,13 +250,19 @@ def _render(lead: Lead, token: str) -> tuple[str, str]:
     linkedin_block = link("LinkedIn", settings.email_linkedin_url)
     cta = f"<p>{html.escape(settings.email_cta)}</p>" if settings.email_cta else ""
 
-    # Footer: unsubscribe is legally required (CAN-SPAM); company/address only when set.
-    footer_parts = [f'<a href="{unsubscribe_url(token)}">Unsubscribe</a>']
+    # Footer: company/address only when set; unsubscribe optional (config flag).
+    footer_parts = []
+    if settings.email_include_unsubscribe:
+        footer_parts.append(f'<a href="{unsubscribe_url(token)}">Unsubscribe</a>')
     if settings.sender_company:
         footer_parts.append(html.escape(settings.sender_company))
     if settings.sender_address:
         footer_parts.append(html.escape(settings.sender_address))
-    footer = " · ".join(footer_parts)
+    footer_html = (
+        f'<p style="color:#888;font-size:12px">{" · ".join(footer_parts)}</p>'
+        if footer_parts
+        else ""
+    )
 
     body = (
         "<html><body>"
@@ -270,7 +276,7 @@ def _render(lead: Lead, token: str) -> tuple[str, str]:
         "<p>If you're not the right person for this, could you point me to whoever is?</p>"
         f"<p>Thanks,<br>{html.escape(sender)}</p>"
         f"{linkedin_block}"
-        f'<p style="color:#888;font-size:12px">{footer}</p>'
+        f"{footer_html}"
         "</body></html>"
     )
     body += pixel_html(token)

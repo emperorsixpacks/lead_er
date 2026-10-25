@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     email_linkedin_url: str = ""
     # One-line call-to-action appended after the personalized hook.
     email_cta: str = "Would you be open to a quick 15-minute chat?"
+    # Include an unsubscribe link in the footer (recommended for CAN-SPAM/GDPR).
+    email_include_unsubscribe: bool = False
     # CAN-SPAM: physical mailing address + sender name on every email.
     sender_company: str = ""
     sender_address: str = ""
