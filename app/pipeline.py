@@ -128,12 +128,13 @@ async def discover_usda(limit: int | None = None) -> int:
     items = await usda.fetch_establishments(limit)
     created = 0
     async with SessionLocal() as db:
+        existing = {
+            name
+            for (name,) in (await db.execute(select(Lead.business_name))).all()
+        }
         for item in items:
             name = item["business_name"]
-            exists = (
-                await db.execute(select(Lead.id).where(Lead.business_name == name))
-            ).first()
-            if exists:
+            if name in existing:
                 continue
             candidates = item.pop("website_candidates", [])
             db.add(
@@ -149,6 +150,7 @@ async def discover_usda(limit: int | None = None) -> int:
                     source="usda",
                 )
             )
+            existing.add(name)
             created += 1
         await db.commit()
     return created
