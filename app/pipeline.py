@@ -135,6 +135,7 @@ async def discover_usda(limit: int | None = None) -> int:
             ).first()
             if exists:
                 continue
+            candidates = item.pop("website_candidates", [])
             db.add(
                 Lead(
                     business_name=name,
@@ -144,6 +145,7 @@ async def discover_usda(limit: int | None = None) -> int:
                     country=item.get("country"),
                     phone=item.get("phone"),
                     website=item.get("website"),
+                    facts={"website_candidates": candidates} if candidates else None,
                     source="usda",
                 )
             )

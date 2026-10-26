@@ -25,11 +25,14 @@ def _guess_domains(name: str, dbas: str) -> list[str]:
     raw = [name] + [d.strip() for d in (dbas or "").split(";") if d.strip()]
     out: list[str] = []
     for n in raw:
-        # strip legal suffixes + punctuation
-        slug = re.sub(r"\b(inc|llc|co|corp|ltd|company|incorporated)\b", "", n.lower())
-        slug = re.sub(r"[^a-z0-9]", "", slug)
-        if slug and slug not in out:
-            out.append(f"{slug}.com")
+        # strip a leading "(City) - " prefix used for multi-plant companies
+        n = re.sub(r"^\([^)]*\)\s*[-–—]?\s*", "", n.strip())
+        # strip legal suffixes, case-insensitively
+        n = re.sub(r"\b(inc|llc|co|corp|ltd|company|corporation|incorporated)\b\.?", "", n, flags=re.IGNORECASE)
+        slug = re.sub(r"[^a-z0-9]", "", n.lower())
+        domain = f"{slug}.com"
+        if slug and domain not in out:
+            out.append(domain)
     return out
 
 
@@ -53,6 +56,7 @@ async def fetch_establishments(limit: int | None = None) -> list[dict]:
                 "country": "US",
                 "phone": (row.get("phone") or "").strip(),
                 "website": domains[0] if domains else None,
+                "website_candidates": domains,
                 "external_id": f"usda/{row.get('establishment_id') or row.get('establishment_number')}",
             }
         )
