@@ -99,6 +99,10 @@ async def personalize(
             {"role": "user", "content": context},
         ],
         "temperature": 0.3,
+        # Gemini (and some reasoning models) require non-streaming + a max_tokens
+        # or they consume the whole budget "thinking" and return nothing.
+        "stream": False,
+        "max_tokens": 800,
     }
 
     async with httpx.AsyncClient() as client:
