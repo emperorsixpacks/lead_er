@@ -19,6 +19,8 @@ async def main() -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("discover")
+    usda = sub.add_parser("usda")
+    usda.add_argument("--limit", type=int, default=None)
     for c in ("enrich", "verify", "personalize", "send"):
         p = sub.add_parser(c)
         p.add_argument("lead_id")
@@ -30,6 +32,8 @@ async def main() -> None:
 
     if args.cmd == "discover":
         print(await pipeline.discover())
+    elif args.cmd == "usda":
+        print(await pipeline.discover_usda(args.limit))
     elif args.cmd == "enrich":
         print(await pipeline.enrich_lead(args.lead_id))
     elif args.cmd == "verify":

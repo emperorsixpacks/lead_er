@@ -120,6 +120,38 @@ async def discover(categories: list[str] | None = None, cities: list[str] | None
     return created
 
 
+# ── USDA FSIS (meat/poultry establishments) ───────────────────────────
+async def discover_usda(limit: int | None = None) -> int:
+    """Import meat/poultry establishments from the USDA FSIS directory."""
+    from app.services import usda
+
+    items = await usda.fetch_establishments(limit)
+    created = 0
+    async with SessionLocal() as db:
+        for item in items:
+            name = item["business_name"]
+            exists = (
+                await db.execute(select(Lead.id).where(Lead.business_name == name))
+            ).first()
+            if exists:
+                continue
+            db.add(
+                Lead(
+                    business_name=name,
+                    category=item.get("category"),
+                    address=item.get("address"),
+                    city=item.get("city"),
+                    country=item.get("country"),
+                    phone=item.get("phone"),
+                    website=item.get("website"),
+                    source="usda",
+                )
+            )
+            created += 1
+        await db.commit()
+    return created
+
+
 # ── Enrich ────────────────────────────────────────────────────────────
 async def enrich_lead(lead_id: str) -> dict:
     async with SessionLocal() as db:

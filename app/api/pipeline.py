@@ -13,6 +13,12 @@ async def run_discover(bg: BackgroundTasks, categories: list[str] | None = None,
     return {"started": "discover"}
 
 
+@router.post("/usda")
+async def run_usda(bg: BackgroundTasks, limit: int | None = None):
+    bg.add_task(pipeline.discover_usda, limit)
+    return {"started": "usda", "limit": limit}
+
+
 @router.post("/enrich/{lead_id}")
 async def run_enrich(lead_id: UUID, bg: BackgroundTasks):
     bg.add_task(pipeline.enrich_lead, str(lead_id))
