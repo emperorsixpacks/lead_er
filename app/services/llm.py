@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 
@@ -105,15 +106,25 @@ async def personalize(
         "max_tokens": 800,
     }
 
+    url = f"{settings.llm_base_url.rstrip('/')}/chat/completions"
+    data = None
     async with httpx.AsyncClient() as client:
-        r = await client.post(
-            f"{settings.llm_base_url.rstrip('/')}/chat/completions",
-            json=body,
-            headers=headers,
-            timeout=120,
-        )
-        r.raise_for_status()
-        data = r.json()
+        for attempt in range(3):
+            try:
+                r = await client.post(url, json=body, headers=headers, timeout=120)
+                # Retry transient provider errors (overload/rate-limit).
+                if r.status_code in (429, 500, 502, 503, 504) and attempt < 2:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                r.raise_for_status()
+                data = r.json()
+                break
+            except httpx.HTTPStatusError:
+                if attempt == 2:
+                    raise
+                await asyncio.sleep(2 ** attempt)
 
+    if data is None:
+        raise RuntimeError("LLM request failed after retries")
     content = data["choices"][0]["message"]["content"]
     return _extract_json(content)
