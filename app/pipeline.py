@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from app.config import settings
 from app.db import SessionLocal
 from app.models import Email, Lead
-from app.services import gmail, llm, places, verifier
+from app.services import gmail, llm, places, verifier, websearch
 from app.services.email_guess import extract_people, guess_emails, guess_generic, _split
 from app.services.enrich import crawl
 from app.services.geocode import geocode_city
@@ -168,10 +168,33 @@ async def enrich_lead(lead_id: str) -> dict:
             return {"error": f"crawl:{exc.__class__.__name__}"}
         emails = data.get("emails", [])
         site_text = data.get("site_text", "")
+        domain = urlparse(lead.website).netloc
+
+        # Free fallback when the guessed domain had nothing: RDAP (WHOIS) on the
+        # domain, then a search to find the real website.
+        if not emails:
+            try:
+                reg_email = await websearch.rdap_email(domain)
+                if reg_email:
+                    emails = [reg_email]
+            except Exception:
+                pass
+        if not emails:
+            try:
+                real = await websearch.resolve_website(lead.business_name or "", lead.city or "")
+                if real and real != domain:
+                    data2 = await crawl(f"https://{real}")
+                    if data2.get("emails"):
+                        emails = data2["emails"]
+                        lead.website = f"https://{real}"
+                        domain = real
+                    if data2.get("site_text"):
+                        site_text = data2["site_text"]
+            except Exception:
+                pass
 
         # Founder/owner detection + email pattern guessing when no address was published.
         people = extract_people(site_text)
-        domain = urlparse(lead.website).netloc
         candidates: list[str] = []
         for person in people[:3]:
             first, last = _split(person["name"])

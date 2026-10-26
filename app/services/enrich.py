@@ -3,7 +3,7 @@ from urllib.parse import urljoin, urlparse
 
 EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 SOCIAL_HOSTS = ("linkedin.com", "twitter.com", "x.com", "facebook.com", "instagram.com", "youtube.com")
-_PAGES = ("", "contact", "contact-us", "about", "about-us", "team")
+_PAGES = ("", "contact", "contact-us", "about", "about-us", "team", "sales", "wholesale", "orders")
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -43,6 +43,10 @@ async def crawl(website: str) -> dict:
                 "() => Array.from(document.querySelectorAll('a')).map(a => a.href)"
             )
             for href in links:
+                if href.startswith("mailto:"):
+                    m = EMAIL_RE.search(href)
+                    if m:
+                        emails.add(m.group(0).lower())
                 try:
                     host = urlparse(href).netloc.lower()
                 except Exception:
