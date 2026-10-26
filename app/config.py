@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     email_cta: str = "Would you be open to a quick 15-minute chat?"
     # Include an unsubscribe link in the footer (recommended for CAN-SPAM/GDPR).
     email_include_unsubscribe: bool = False
+    # Include the 1px open-tracking pixel. Off by default: it's a spam signal
+    # and open data is noisy; click tracking (wrapped links) stays on.
+    email_include_pixel: bool = False
     # CAN-SPAM: physical mailing address + sender name on every email.
     sender_company: str = ""
     sender_address: str = ""

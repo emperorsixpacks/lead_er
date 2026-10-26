@@ -279,7 +279,8 @@ def _render(lead: Lead, token: str) -> tuple[str, str]:
         f"{footer_html}"
         "</body></html>"
     )
-    body += pixel_html(token)
+    if settings.email_include_pixel:
+        body += pixel_html(token)
     return subject, body
 
 
