@@ -32,6 +32,9 @@ CATEGORY_TAGS: dict[str, list[tuple[str, str]]] = {
     "cleaning": [("craft", "cleaner"), ("office", "cleaning")],
     "painter": [("craft", "painter")],
     "photographer": [("craft", "photographer")],
+    "wholesaler": [("shop", "wholesale"), ("shop", "trade")],
+    "butcher": [("craft", "butcher"), ("shop", "butcher")],
+    "seafood": [("shop", "seafood")],
 }
 
 _CATEGORY_KEYS = ("amenity", "shop", "office", "craft", "tourism", "leisure")
