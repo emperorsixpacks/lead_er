@@ -1,7 +1,8 @@
-"""Free website/email discovery: Brave Search API + DDG fallback + RDAP.
+"""Free website/email discovery: Tavily search + DDG fallback + RDAP.
 
-Brave Search API (free tier 2k/mo) is reliable; DuckDuckGo scraping is the
-fallback when no key is set. RDAP (WHOIS) provides registrant emails.
+Tavily (free tier 1k/mo) is the primary search source — clean results with
+content snippets. DuckDuckGo scraping is the fallback when no key is set.
+RDAP (WHOIS) provides registrant emails.
 """
 import re
 import urllib.parse
@@ -11,8 +12,7 @@ import httpx
 
 from app.config import settings
 
-BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
-CSE_URL = "https://www.googleapis.com/customsearch/v1"
+TAVILY_URL = "https://api.tavily.com/search"
 DDG_URL = "https://html.duckduckgo.com/html/"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
 
@@ -26,45 +26,30 @@ _DIRECTORY_DOMAINS = {
 }
 
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
-_JUNK = ("duckduckgo.com", "example.com", "sentry.io", "w3.org", "gmailproxy", "brave.com")
+_JUNK = ("duckduckgo.com", "example.com", "sentry.io", "w3.org", "gmailproxy", "tavily.com", "brave.com")
+# Email-format pages (leadiq/rocketreach) show placeholders like first.last@, jdoe@, lastf@.
+_PLACEHOLDER = ("first", "last", "doe", "jdoe", "jane", "john", "user", "test", "example", "flast", "lfirst")
 
 
-def _use_brave() -> bool:
-    return bool(settings.brave_search_api_key)
+def _is_placeholder(email: str) -> bool:
+    local = email.split("@", 1)[0].lower()
+    return any(p in local for p in _PLACEHOLDER)
 
 
-def _use_cse() -> bool:
-    return bool(settings.google_cse_key and settings.google_cse_cx)
+def _use_tavily() -> bool:
+    return bool(settings.tavily_api_key)
 
 
-async def _cse_search(query: str, count: int = 10) -> list[dict]:
-    params = {
-        "q": query,
-        "key": settings.google_cse_key,
-        "cx": settings.google_cse_cx,
-        "num": min(count, 10),
-    }
+async def _tavily_search(query: str, max_results: int = 10) -> list[dict]:
+    body = {"query": query, "api_key": settings.tavily_api_key, "max_results": max_results}
     async with httpx.AsyncClient() as client:
-        r = await client.get(CSE_URL, params=params, timeout=20)
+        r = await client.post(TAVILY_URL, json=body, timeout=30)
         r.raise_for_status()
         data = r.json()
     return [
-        {"title": it.get("title", ""), "url": it.get("link", ""), "description": it.get("snippet", "")}
-        for it in data.get("items", [])
+        {"title": it.get("title", ""), "url": it.get("url", ""), "description": it.get("content", "")}
+        for it in data.get("results", [])
     ]
-
-
-async def _brave_search(query: str, count: int = 10) -> list[dict]:
-    headers = {
-        "Accept": "application/json",
-        "Accept-Encoding": "gzip",
-        "X-Subscription-Token": settings.brave_search_api_key,
-    }
-    async with httpx.AsyncClient() as client:
-        r = await client.get(BRAVE_URL, params={"q": query, "count": count}, headers=headers, timeout=20)
-        r.raise_for_status()
-        data = r.json()
-    return data.get("web", {}).get("results", [])
 
 
 async def _ddg_results(query: str) -> list[dict]:
@@ -78,14 +63,9 @@ async def _ddg_results(query: str) -> list[dict]:
 
 
 async def _search(query: str) -> list[dict]:
-    if _use_cse():
+    if _use_tavily():
         try:
-            return await _cse_search(query)
-        except Exception:
-            pass
-    if _use_brave():
-        try:
-            return await _brave_search(query)
+            return await _tavily_search(query)
         except Exception:
             pass
     return await _ddg_results(query)
@@ -138,7 +118,7 @@ async def search_emails(name: str, domain: str = "") -> list[str]:
             text = " ".join([res.get("title", ""), res.get("description", ""), res.get("url", "")])
             for m in _EMAIL_RE.findall(text):
                 e = m.lower()
-                if any(j in e for j in _JUNK):
+                if any(j in e for j in _JUNK) or _is_placeholder(e):
                     continue
                 if e not in found:
                     found.append(e)
@@ -163,7 +143,7 @@ async def search_person_email(name: str, domain: str) -> str | None:
             text = " ".join([res.get("title", ""), res.get("description", ""), res.get("url", "")])
             for m in _EMAIL_RE.findall(text):
                 e = m.lower()
-                if e.endswith("@" + domain) and not any(j in e for j in _JUNK):
+                if e.endswith("@" + domain) and not any(j in e for j in _JUNK) and not _is_placeholder(e):
                     return e
     return None
 

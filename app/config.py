@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     email_verify_mock: bool = False
     # Free search API (2k/mo) — better than scraping DuckDuckGo.
     brave_search_api_key: str = ""
+    # Tavily search API (1k/mo free) — clean results, plain API key.
+    tavily_api_key: str = ""
     # Google Custom Search JSON API (100/day free).
     google_cse_key: str = ""
     google_cse_cx: str = ""
