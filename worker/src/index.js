@@ -12,9 +12,9 @@ const GIF = Uint8Array.from(
 );
 
 export default {
-  // Cron trigger: kick off discover + send on the backend.
+  // Cron trigger: draft the outreach PDF and email it to you for manual sending.
   async scheduled(event, env, ctx) {
-    await fetch(env.API_URL + "/pipeline/schedule", { method: "POST" }).catch(() => {});
+    await fetch(env.API_URL + "/pipeline/draft?limit=20", { method: "POST" }).catch(() => {});
   },
 
   async fetch(req, env, ctx) {
