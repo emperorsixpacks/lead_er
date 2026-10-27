@@ -15,7 +15,7 @@ from app.config import settings
 from app.db import SessionLocal
 from app.models import Email, Lead
 from app.services import gmail, llm, places, verifier, websearch
-from app.services.email_guess import extract_people, guess_emails, guess_generic, _split
+from app.services.email_guess import extract_people, guess_emails, guess_generic, is_generic, _split
 from app.services.enrich import crawl
 from app.services.geocode import geocode_city
 from app.services import overpass
@@ -210,6 +210,9 @@ async def enrich_lead(lead_id: str) -> dict:
         if not emails:
             candidates += guess_generic(domain)
         candidates = list(dict.fromkeys(c for c in candidates if c))
+
+        # Prioritize: real person emails before generic role addresses.
+        emails = sorted(emails, key=is_generic)
 
         if emails and not lead.email:
             lead.email = emails[0]

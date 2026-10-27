@@ -57,10 +57,19 @@ _JUNK = ("duckduckgo.com", "example.com", "sentry.io", "w3.org", "gmailproxy")
 
 
 async def search_emails(name: str, domain: str = "") -> list[str]:
-    """Search the web for a business's published emails (directories, press, etc.)."""
-    queries = [f'"{name}" email contact']
+    """Search the web for a business's published emails (directories, press, etc.).
+
+    Prefers real people's emails over generic role addresses (info@/sales@).
+    """
+    from app.services.email_guess import is_generic
+
+    queries = []
     if domain:
-        queries.insert(0, f'"{name}" "@{domain}"')
+        queries.append(f'"{name}" "@{domain}"')
+    queries += [
+        f'"{name}" email contact',
+        f'"{name}" owner OR founder OR president OR "general manager" email',
+    ]
 
     found: list[str] = []
     for q in queries:
@@ -78,6 +87,9 @@ async def search_emails(name: str, domain: str = "") -> list[str]:
                 found.append(e)
         if found:
             break
+
+    # people first, generic role addresses last
+    found.sort(key=is_generic)
     return found[:10]
 
 

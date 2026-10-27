@@ -88,3 +88,11 @@ def guess_generic(domain: str) -> list[str]:
     if not domain:
         return []
     return [f"{p}@{domain}" for p in GENERIC_PREFIXES]
+
+
+def is_generic(email: str) -> bool:
+    """True for role addresses (info@, sales@, ...), False for person emails."""
+    local = (email or "").split("@", 1)[0].lower().strip()
+    return local in GENERIC_PREFIXES or local.startswith(
+        ("info", "contact", "sales", "admin", "hello", "office", "support", "orders", "inquiries")
+    )
