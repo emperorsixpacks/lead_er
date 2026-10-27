@@ -1,7 +1,7 @@
-"""Free website/email discovery: DuckDuckGo search + RDAP (WHOIS) lookup.
+"""Free website/email discovery: Brave Search API + DDG fallback + RDAP.
 
-Used to replace blind domain-guessing: given a business name + city, find the
-real domain via search, then optionally pull the registrant email via RDAP.
+Brave Search API (free tier 2k/mo) is reliable; DuckDuckGo scraping is the
+fallback when no key is set. RDAP (WHOIS) provides registrant emails.
 """
 import re
 import urllib.parse
@@ -9,6 +9,9 @@ from urllib.parse import urlparse
 
 import httpx
 
+from app.config import settings
+
+BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
 DDG_URL = "https://html.duckduckgo.com/html/"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
 
@@ -21,16 +24,51 @@ _DIRECTORY_DOMAINS = {
     "cybo.com", "us-info.com", "opencorporates.com", "buzzfile.com", "tripadvisor.com",
 }
 
+_EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+_JUNK = ("duckduckgo.com", "example.com", "sentry.io", "w3.org", "gmailproxy", "brave.com")
 
-async def search_domains(query: str, limit: int = 5) -> list[str]:
+
+def _use_brave() -> bool:
+    return bool(settings.brave_search_api_key)
+
+
+async def _brave_search(query: str, count: int = 10) -> list[dict]:
+    headers = {
+        "Accept": "application/json",
+        "Accept-Encoding": "gzip",
+        "X-Subscription-Token": settings.brave_search_api_key,
+    }
+    async with httpx.AsyncClient() as client:
+        r = await client.get(BRAVE_URL, params={"q": query, "count": count}, headers=headers, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+    return data.get("web", {}).get("results", [])
+
+
+async def _ddg_results(query: str) -> list[dict]:
     async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
         r = await client.get(DDG_URL, params={"q": query}, timeout=20)
         r.raise_for_status()
-
-    domains: list[str] = []
+    out = []
     for m in re.finditer(r'uddg=([^"&]+)', r.text):
-        url = urllib.parse.unquote(m.group(1))
-        dom = urlparse(url).netloc.lower().removeprefix("www.")
+        out.append({"url": urllib.parse.unquote(m.group(1)), "description": r.text})
+    return out
+
+
+async def _search(query: str) -> list[dict]:
+    if _use_brave():
+        try:
+            return await _brave_search(query)
+        except Exception:
+            pass
+    return await _ddg_results(query)
+
+
+async def search_domains(query: str, limit: int = 5) -> list[str]:
+    results = await _search(query)
+    domains: list[str] = []
+    for res in results:
+        dom = urlparse(res.get("url", "")).netloc.lower().removeprefix("www.")
         if not dom or not dom.count("."):
             continue
         if any(d in dom for d in _DIRECTORY_DOMAINS):
@@ -51,16 +89,8 @@ async def resolve_website(name: str, city: str = "", state: str = "") -> str | N
     return domains[0] if domains else None
 
 
-_EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
-# DDG's own anti-bot / junk addresses.
-_JUNK = ("duckduckgo.com", "example.com", "sentry.io", "w3.org", "gmailproxy")
-
-
 async def search_emails(name: str, domain: str = "") -> list[str]:
-    """Search the web for a business's published emails (directories, press, etc.).
-
-    Prefers real people's emails over generic role addresses (info@/sales@).
-    """
+    """Search the web for a business's published emails. Prefers people's emails."""
     from app.services.email_guess import is_generic
 
     queries = []
@@ -74,21 +104,20 @@ async def search_emails(name: str, domain: str = "") -> list[str]:
     found: list[str] = []
     for q in queries:
         try:
-            async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
-                r = await client.get(DDG_URL, params={"q": q}, timeout=20)
-                r.raise_for_status()
+            results = await _search(q)
         except Exception:
             continue
-        for m in _EMAIL_RE.findall(r.text):
-            e = m.lower()
-            if any(j in e for j in _JUNK):
-                continue
-            if e not in found:
-                found.append(e)
+        for res in results:
+            text = " ".join([res.get("title", ""), res.get("description", ""), res.get("url", "")])
+            for m in _EMAIL_RE.findall(text):
+                e = m.lower()
+                if any(j in e for j in _JUNK):
+                    continue
+                if e not in found:
+                    found.append(e)
         if found:
             break
 
-    # people first, generic role addresses last
     found.sort(key=is_generic)
     return found[:10]
 
@@ -98,18 +127,17 @@ async def search_person_email(name: str, domain: str) -> str | None:
     if not name or not domain:
         return None
     domain = domain.lower().removeprefix("www.")
-    queries = [f'"{name}" "@{domain}"', f'"{name}" {domain} email']
-    for q in queries:
+    for q in [f'"{name}" "@{domain}"', f'"{name}" {domain} email']:
         try:
-            async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
-                r = await client.get(DDG_URL, params={"q": q}, timeout=20)
-                r.raise_for_status()
+            results = await _search(q)
         except Exception:
             continue
-        for m in _EMAIL_RE.findall(r.text):
-            e = m.lower()
-            if e.endswith("@" + domain) and not any(j in e for j in _JUNK):
-                return e
+        for res in results:
+            text = " ".join([res.get("title", ""), res.get("description", ""), res.get("url", "")])
+            for m in _EMAIL_RE.findall(text):
+                e = m.lower()
+                if e.endswith("@" + domain) and not any(j in e for j in _JUNK):
+                    return e
     return None
 
 

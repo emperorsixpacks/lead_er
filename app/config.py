@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     millionverifier_api_key: str = ""
     # Local testing: return deterministic results instead of calling a provider.
     email_verify_mock: bool = False
+    # Free search API (2k/mo) — better than scraping DuckDuckGo.
+    brave_search_api_key: str = ""
     llm_base_url: str = "https://api.openai.com/v1"
     llm_api_key: str = ""
     llm_model: str = "gpt-4o-mini"
