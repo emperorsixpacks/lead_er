@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     email_verify_mock: bool = False
     # Free search API (2k/mo) — better than scraping DuckDuckGo.
     brave_search_api_key: str = ""
+    # Google Custom Search JSON API (100/day free) — uses your existing GCP project.
+    google_cse_key: str = ""
+    google_cse_cx: str = ""
     llm_base_url: str = "https://api.openai.com/v1"
     llm_api_key: str = ""
     llm_model: str = "gpt-4o-mini"

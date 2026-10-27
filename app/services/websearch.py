@@ -12,6 +12,7 @@ import httpx
 from app.config import settings
 
 BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
+CSE_URL = "https://www.googleapis.com/customsearch/v1"
 DDG_URL = "https://html.duckduckgo.com/html/"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
 
@@ -30,6 +31,27 @@ _JUNK = ("duckduckgo.com", "example.com", "sentry.io", "w3.org", "gmailproxy", "
 
 def _use_brave() -> bool:
     return bool(settings.brave_search_api_key)
+
+
+def _use_cse() -> bool:
+    return bool(settings.google_cse_key and settings.google_cse_cx)
+
+
+async def _cse_search(query: str, count: int = 10) -> list[dict]:
+    params = {
+        "q": query,
+        "key": settings.google_cse_key,
+        "cx": settings.google_cse_cx,
+        "num": min(count, 10),
+    }
+    async with httpx.AsyncClient() as client:
+        r = await client.get(CSE_URL, params=params, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+    return [
+        {"title": it.get("title", ""), "url": it.get("link", ""), "description": it.get("snippet", "")}
+        for it in data.get("items", [])
+    ]
 
 
 async def _brave_search(query: str, count: int = 10) -> list[dict]:
@@ -56,6 +78,11 @@ async def _ddg_results(query: str) -> list[dict]:
 
 
 async def _search(query: str) -> list[dict]:
+    if _use_cse():
+        try:
+            return await _cse_search(query)
+        except Exception:
+            pass
     if _use_brave():
         try:
             return await _brave_search(query)
