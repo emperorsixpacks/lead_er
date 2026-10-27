@@ -10,4 +10,5 @@ google-auth>=2.29
 google-auth-oauthlib>=1.2
 google-api-python-client>=2.127
 google-auth-httplib2>=0.2
+fpdf2>=2.7
 playwright>=1.44

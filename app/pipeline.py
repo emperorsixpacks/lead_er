@@ -19,6 +19,7 @@ from app.services.email_guess import extract_people, guess_emails, guess_generic
 from app.services.enrich import crawl
 from app.services.geocode import geocode_city
 from app.services import overpass
+from app.services.report import build_pdf
 from app.services.tracking import new_token, pixel_html, unsubscribe_url
 
 logger = logging.getLogger("lead_er")
@@ -349,6 +350,42 @@ def _render(lead: Lead, token: str) -> tuple[str, str]:
     return subject, body
 
 
+def _render_text(lead: Lead) -> tuple[str, str]:
+    """Plain-text version of the email (for the PDF / manual copy-paste)."""
+    subject = (lead.facts or {}).get("subject_line") or SUBJECT_TEMPLATE.format(
+        business=lead.business_name or "your business"
+    )
+    facts = (lead.facts or {}).get("facts", []) or []
+    hook = lead.hook or f"I came across {lead.business_name or 'your business'} and wanted to reach out."
+    contact_name = (lead.facts or {}).get("contact_name", "") or ""
+    first_name = contact_name.strip().split(" ")[0] if contact_name.strip() else ""
+    name = first_name or (lead.business_name or "there")
+    sender = settings.sender_name or settings.sender_company or settings.gmail_smtp_user
+
+    lines = [f"Hi {name},", "", hook]
+    if settings.email_value_prop:
+        lines += ["", settings.email_value_prop]
+    if facts:
+        lines += ["", *[f"- {f}" for f in facts]]
+    if settings.email_demo_url:
+        lines += ["", f"Watch a 3-minute demo: {settings.email_demo_url}"]
+    if settings.email_booking_url:
+        lines += ["", f"Book a 15-minute call: {settings.email_booking_url}"]
+    if settings.email_cta:
+        lines += ["", settings.email_cta]
+    lines += [
+        "",
+        "If you're not the right person for this, could you point me to whoever is?",
+        "",
+        "Thanks,",
+        sender,
+    ]
+    if settings.email_linkedin_url:
+        lines.append(settings.email_linkedin_url)
+
+    return subject, "\n".join(lines)
+
+
 async def send_lead(lead_id: str) -> str:
     async with SessionLocal() as db:
         lead = (await db.execute(select(Lead).where(Lead.id == lead_id))).scalar_one_or_none()
@@ -414,6 +451,47 @@ async def send_lead(lead_id: str) -> str:
 
 
 # ── Full pipeline ─────────────────────────────────────────────────────
+async def draft_report(limit: int = 20) -> dict:
+    """Enrich + personalize leads, build a PDF of drafts, email it to you.
+
+    You then send the emails yourself from your normal Gmail (no spam filter).
+    """
+    async with SessionLocal() as db:
+        leads = (
+            await db.execute(
+                select(Lead)
+                .where(Lead.source == "usda", Lead.status == "new", Lead.website.is_not(None))
+                .order_by(Lead.created_at.desc())
+                .limit(limit)
+            )
+        ).scalars().all()
+
+    drafts: list[dict] = []
+    for lead in leads:
+        await enrich_lead(str(lead.id))
+        await personalize_lead(str(lead.id))
+        async with SessionLocal() as db:
+            l = (await db.execute(select(Lead).where(Lead.id == lead.id))).scalar_one()
+            if not l.email:
+                continue
+            subject, body = _render_text(l)
+            drafts.append(
+                {
+                    "business_name": l.business_name,
+                    "category": l.category,
+                    "email": l.email,
+                    "subject": subject,
+                    "body": body,
+                }
+            )
+
+    pdf_bytes = build_pdf(drafts) if drafts else None
+    sent_to = settings.report_email or settings.send_bcc_email
+    if pdf_bytes and sent_to:
+        gmail.send_pdf_report(sent_to, f"lead_er drafts ({len(drafts)} leads)", pdf_bytes, "lead_er_drafts.pdf")
+    return {"leads_processed": len(leads), "drafts": len(drafts), "sent_to": sent_to}
+
+
 async def run_pipeline(limit: int = 50) -> dict:
     async with SessionLocal() as db:
         new_leads = (

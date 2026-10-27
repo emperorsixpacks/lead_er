@@ -28,12 +28,17 @@ async def main() -> None:
     run = sub.add_parser("run")
     run.add_argument("--limit", type=int, default=50)
 
+    draft = sub.add_parser("draft")
+    draft.add_argument("--limit", type=int, default=20)
+
     args = parser.parse_args()
 
     if args.cmd == "discover":
         print(await pipeline.discover())
     elif args.cmd == "usda":
         print(await pipeline.discover_usda(args.limit))
+    elif args.cmd == "draft":
+        print(await pipeline.draft_report(args.limit))
     elif args.cmd == "enrich":
         print(await pipeline.enrich_lead(args.lead_id))
     elif args.cmd == "verify":

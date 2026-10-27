@@ -1,5 +1,7 @@
 import base64
 import smtplib
+from email.mime.application import MIMEApplication
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from app.config import settings
@@ -7,8 +9,7 @@ from app.config import settings
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
 
 
-def _gmail_api_send(to: str, subject: str, html: str, sender: str, bcc: str | None):
-    """Send via the Gmail API (HTTPS, works on Render)."""
+def _build_service():
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
@@ -22,7 +23,43 @@ def _gmail_api_send(to: str, subject: str, html: str, sender: str, bcc: str | No
         scopes=SCOPES,
     )
     creds.refresh(Request())
+    return build("gmail", "v1", credentials=creds)
 
+
+def _send_raw(raw: str):
+    service = _build_service()
+    sent = service.users().messages().send(userId="me", body={"raw": raw}).execute()
+    return sent.get("id"), sent.get("threadId", "")
+
+
+def send_pdf_report(to: str, subject: str, pdf_bytes: bytes, filename: str) -> tuple[str | None, str | None]:
+    """Email a PDF attachment to yourself (report). Uses Gmail API / SMTP."""
+    sender = settings.gmail_smtp_user
+    if not sender:
+        raise RuntimeError("Set GMAIL_SMTP_USER (your Gmail address) in .env")
+
+    msg = MIMEMultipart()
+    msg["To"] = to
+    msg["From"] = sender
+    msg["Subject"] = subject
+    msg.attach(MIMEText("Your lead_er outreach drafts are attached.", "plain"))
+    part = MIMEApplication(pdf_bytes, _subtype="pdf")
+    part.add_header("Content-Disposition", "attachment", filename=filename)
+    msg.attach(part)
+
+    if settings.gmail_refresh_token:
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+        return _send_raw(raw)
+
+    recipients = [to]
+    with smtplib.SMTP_SSL(settings.gmail_smtp_host, settings.gmail_smtp_port) as server:
+        server.login(sender, settings.gmail_smtp_password)
+        server.sendmail(sender, recipients, msg.as_string())
+    return None, None
+
+
+def _gmail_api_send(to: str, subject: str, html: str, sender: str, bcc: str | None):
+    """Send via the Gmail API (HTTPS, works on Render)."""
     msg = MIMEText(html, "html")
     msg["To"] = to
     msg["From"] = sender
@@ -30,10 +67,7 @@ def _gmail_api_send(to: str, subject: str, html: str, sender: str, bcc: str | No
     if bcc:
         msg["Bcc"] = bcc
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-
-    service = build("gmail", "v1", credentials=creds)
-    sent = service.users().messages().send(userId="me", body={"raw": raw}).execute()
-    return sent.get("id"), sent.get("threadId", "")
+    return _send_raw(raw)
 
 
 def _smtp_send(to: str, subject: str, html: str, sender: str, bcc: str | None):

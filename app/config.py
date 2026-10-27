@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     daily_send_cap: int = 30
     # BCC a copy of every send to this address (e.g. your own inbox).
     send_bcc_email: str = ""
+    # Where to email the draft PDF (for manual sending). Falls back to send_bcc_email.
+    report_email: str = ""
     # Email copy: signoff name, pitch, and links (all optional; omitted when empty).
     sender_name: str = ""
     email_value_prop: str = ""
