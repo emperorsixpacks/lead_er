@@ -87,13 +87,24 @@ async def search_domains(query: str, limit: int = 5) -> list[str]:
     return domains
 
 
+def _name_matches_domain(name: str, domain: str) -> bool:
+    """True if a meaningful token of the business name appears in the domain."""
+    tokens = {t for t in re.findall(r"[a-z0-9]{4,}", (name or "").lower())}
+    core = (domain or "").split(".")[0].lower()
+    return any(t in core for t in tokens)
+
+
 async def resolve_website(name: str, city: str = "", state: str = "") -> str | None:
     query = f'"{name}" {city} {state}'.strip()
     try:
-        domains = await search_domains(query)
+        domains = await search_domains(query, limit=8)
     except Exception:
         return None
-    return domains[0] if domains else None
+    # only accept a site whose domain matches the business name (avoid directories)
+    for d in domains:
+        if _name_matches_domain(name, d):
+            return d
+    return None
 
 
 async def search_emails(name: str, domain: str = "") -> list[str]:
