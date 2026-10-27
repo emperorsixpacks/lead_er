@@ -120,6 +120,10 @@ async def search_emails(name: str, domain: str = "") -> list[str]:
                 e = m.lower()
                 if any(j in e for j in _JUNK) or _is_placeholder(e):
                     continue
+                # Only accept emails on the company's own domain — reject other
+                # companies' addresses that directory pages happen to show.
+                if domain and not e.endswith("@" + domain):
+                    continue
                 if e not in found:
                     found.append(e)
         if found:
