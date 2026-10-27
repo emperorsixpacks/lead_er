@@ -477,6 +477,17 @@ async def draft_report(limit: int = 20) -> dict:
             l = (await db.execute(select(Lead).where(Lead.id == lead.id))).scalar_one()
             if not l.email:
                 continue
+            # Prefer the founder/owner's personal email over a generic info@/hello@.
+            contact = (l.facts or {}).get("contact_name", "") or ""
+            domain = urlparse(l.website or "").netloc
+            if contact and is_generic(l.email):
+                try:
+                    person_email = await websearch.search_person_email(contact, domain)
+                    if person_email:
+                        l.email = person_email
+                        await db.commit()
+                except Exception:
+                    pass
             subject, body = _render_text(l)
             drafts.append(
                 {

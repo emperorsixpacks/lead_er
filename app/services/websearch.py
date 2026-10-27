@@ -93,6 +93,26 @@ async def search_emails(name: str, domain: str = "") -> list[str]:
     return found[:10]
 
 
+async def search_person_email(name: str, domain: str) -> str | None:
+    """Search for a specific person's email at a domain (e.g. 'John Smith' @ acme.com)."""
+    if not name or not domain:
+        return None
+    domain = domain.lower().removeprefix("www.")
+    queries = [f'"{name}" "@{domain}"', f'"{name}" {domain} email']
+    for q in queries:
+        try:
+            async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
+                r = await client.get(DDG_URL, params={"q": q}, timeout=20)
+                r.raise_for_status()
+        except Exception:
+            continue
+        for m in _EMAIL_RE.findall(r.text):
+            e = m.lower()
+            if e.endswith("@" + domain) and not any(j in e for j in _JUNK):
+                return e
+    return None
+
+
 async def rdap_email(domain: str) -> str | None:
     """Return the domain's registrant email via RDAP, if not privacy-protected."""
     domain = (domain or "").lower().removeprefix("www.")
