@@ -51,6 +51,36 @@ async def resolve_website(name: str, city: str = "", state: str = "") -> str | N
     return domains[0] if domains else None
 
 
+_EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
+# DDG's own anti-bot / junk addresses.
+_JUNK = ("duckduckgo.com", "example.com", "sentry.io", "w3.org", "gmailproxy")
+
+
+async def search_emails(name: str, domain: str = "") -> list[str]:
+    """Search the web for a business's published emails (directories, press, etc.)."""
+    queries = [f'"{name}" email contact']
+    if domain:
+        queries.insert(0, f'"{name}" "@{domain}"')
+
+    found: list[str] = []
+    for q in queries:
+        try:
+            async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
+                r = await client.get(DDG_URL, params={"q": q}, timeout=20)
+                r.raise_for_status()
+        except Exception:
+            continue
+        for m in _EMAIL_RE.findall(r.text):
+            e = m.lower()
+            if any(j in e for j in _JUNK):
+                continue
+            if e not in found:
+                found.append(e)
+        if found:
+            break
+    return found[:10]
+
+
 async def rdap_email(domain: str) -> str | None:
     """Return the domain's registrant email via RDAP, if not privacy-protected."""
     domain = (domain or "").lower().removeprefix("www.")

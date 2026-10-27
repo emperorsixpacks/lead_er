@@ -192,6 +192,12 @@ async def enrich_lead(lead_id: str) -> dict:
                         site_text = data2["site_text"]
             except Exception:
                 pass
+        if not emails:
+            # Last resort: search the web for the business's published emails.
+            try:
+                emails = await websearch.search_emails(lead.business_name or "", domain)
+            except Exception:
+                pass
 
         # Founder/owner detection + email pattern guessing when no address was published.
         people = extract_people(site_text)
