@@ -211,6 +211,19 @@ async def enrich_lead(lead_id: str) -> dict:
             candidates += guess_generic(domain)
         candidates = list(dict.fromkeys(c for c in candidates if c))
 
+        # Final guard: drop emails from other companies' domains (search noise).
+        # Keep @gmail.com person emails and anything matching the lead's own site.
+        site_domains = set()
+        for w in (lead.website, f"https://{domain}"):
+            d = urlparse(w or "").netloc.lower().removeprefix("www.")
+            if d:
+                site_domains.add(d)
+        emails = [
+            e
+            for e in emails
+            if e.endswith("@gmail.com") or any(e.endswith("@" + d) for d in site_domains)
+        ]
+
         # Prioritize: real person emails before generic role addresses.
         emails = sorted(emails, key=is_generic)
 
